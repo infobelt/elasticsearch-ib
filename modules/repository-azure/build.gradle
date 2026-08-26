@@ -59,7 +59,7 @@ dependencies {
   api "org.reactivestreams:reactive-streams:${versions.reactive_streams}"
 
   // Others
-  api "com.fasterxml.woodstox:woodstox-core:6.7.0"
+  api "com.fasterxml.woodstox:woodstox-core:7.1.0" // required by jackson-dataformat-xml 2.18.x (declares 7.0.0)
   api "com.github.stephenc.jcip:jcip-annotations:1.0-1"
   api "com.nimbusds:content-type:2.3"
   api "com.nimbusds:lang-tag:1.7"
