@@ -8,6 +8,7 @@
 package org.elasticsearch.xpack.core.ssl;
 
 import org.apache.hc.client5.http.ssl.DefaultClientTlsStrategy;
+import org.apache.hc.client5.http.ssl.HostnameVerificationPolicy;
 import org.apache.hc.core5.http.nio.ssl.TlsStrategy;
 import org.apache.hc.core5.reactor.ssl.SSLBufferMode;
 
@@ -20,7 +21,17 @@ class TlsStrategyBuilder extends AbstractSslBuilder<TlsStrategy> {
 
     @Override
     TlsStrategy build(SSLContext sslContext, String[] protocols, String[] ciphers, HostnameVerifier verifier) {
-        return new DefaultClientTlsStrategy(sslContext, protocols, ciphers, SSLBufferMode.DYNAMIC, verifier);
-
+        // The verifier is derived from the configured verification_mode (see AbstractSslBuilder), so it - and not the JSSE
+        // provider - must be the authority on hostname verification. Pin the policy explicitly rather than letting
+        // httpclient5 infer one: as of 5.6.4 a non-null verifier infers BOTH, which additionally enables JSSE endpoint
+        // identification and would reject connections that "certificate" and "none" are meant to allow.
+        return new DefaultClientTlsStrategy(
+            sslContext,
+            protocols,
+            ciphers,
+            SSLBufferMode.DYNAMIC,
+            HostnameVerificationPolicy.CLIENT,
+            verifier
+        );
     }
 }
