@@ -15,9 +15,9 @@ import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
 
 @ChannelHandler.Sharable
-final class ESLoggingHandler extends LoggingHandler {
+public final class ESLoggingHandler extends LoggingHandler {
 
-    static final ESLoggingHandler INSTANCE = new ESLoggingHandler();
+    public static final ESLoggingHandler INSTANCE = new ESLoggingHandler();
 
     private ESLoggingHandler() {
         super(LogLevel.TRACE);

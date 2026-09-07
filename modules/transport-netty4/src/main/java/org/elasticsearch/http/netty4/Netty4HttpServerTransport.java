@@ -29,6 +29,8 @@ import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseEncoder;
 import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.flow.FlowControlHandler;
+import io.netty.handler.logging.LogLevel;
+import io.netty.handler.logging.LoggingHandler;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.timeout.ReadTimeoutException;
 import io.netty.handler.timeout.ReadTimeoutHandler;
@@ -59,7 +61,9 @@ import org.elasticsearch.http.netty4.internal.HttpValidator;
 import org.elasticsearch.rest.ChunkedZipResponse;
 import org.elasticsearch.telemetry.TelemetryProvider;
 import org.elasticsearch.threadpool.ThreadPool;
+import org.elasticsearch.transport.NetworkTraceFlag;
 import org.elasticsearch.transport.netty4.AcceptChannelHandler;
+import org.elasticsearch.transport.netty4.ESLoggingHandler;
 import org.elasticsearch.transport.netty4.NetUtils;
 import org.elasticsearch.transport.netty4.Netty4Plugin;
 import org.elasticsearch.transport.netty4.Netty4Utils;
@@ -330,6 +334,10 @@ public class Netty4HttpServerTransport extends AbstractHttpServerTransport {
             }
             if (tlsConfig.isTLSEnabled()) {
                 ch.pipeline().addLast("ssl", new SslHandler(tlsConfig.createServerSSLEngine()));
+                if (NetworkTraceFlag.TRACE_ENABLED) {
+                    // diagnostic-only: trace raw byte/event flow immediately after the TLS layer hands off to plaintext
+                    ch.pipeline().addLast("logging_post_ssl", ESLoggingHandler.INSTANCE);
+                }
             }
             final var threadWatchdogActivityTracker = transport.threadWatchdog.getActivityTrackerForCurrentThread();
             ch.pipeline()
@@ -415,10 +423,31 @@ public class Netty4HttpServerTransport extends AbstractHttpServerTransport {
                 ch.pipeline().addLast(new Netty4LeakDetectionHandler());
             }
             ch.pipeline().addLast(new Netty4EmptyChunkHandler());
+            if (NetworkTraceFlag.TRACE_ENABLED) {
+                // diagnostic-only: trace whether a decoded request reaches FlowControlHandler
+                ch.pipeline()
+                    .addLast(
+                        "logging_pre_flow_control",
+                        new LoggingHandler("org.elasticsearch.transport.netty4.HttpTrace.pre_flow_control", LogLevel.TRACE)
+                    );
+            }
             // See https://github.com/netty/netty/issues/15053: the combination of FlowControlHandler and HttpContentDecompressor above
             // can emit multiple chunks per read, but HttpBody.Stream requires chunks to arrive one-at-a-time so until that issue is
             // resolved we must add another flow controller here:
             ch.pipeline().addLast(new FlowControlHandler());
+            if (NetworkTraceFlag.TRACE_ENABLED) {
+                // diagnostic-only: trace whether a decoded request is forwarded by FlowControlHandler
+                ch.pipeline()
+                    .addLast(
+                        "logging_post_flow_control",
+                        new LoggingHandler("org.elasticsearch.transport.netty4.HttpTrace.post_flow_control", LogLevel.TRACE)
+                    );
+            }
+            if (NetworkTraceFlag.TRACE_ENABLED) {
+                // diagnostic-only: trace whether a decoded request reaches the final handler and whether a response is
+                // ever written/flushed back down through the encoder
+                ch.pipeline().addLast("logging_pre_pipelining", ESLoggingHandler.INSTANCE);
+            }
             ch.pipeline()
                 .addLast(
                     "pipelining",
